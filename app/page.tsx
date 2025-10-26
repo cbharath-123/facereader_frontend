@@ -41,19 +41,38 @@ export default function Home() {
       formData.append('image', blob, 'photo.jpg');
 
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+      console.log('Sending to backend:', backendUrl);
+      
+      // Add timeout for fetch (60 seconds for cold start)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
+
       const response = await fetch(`${backendUrl}/api/analyze`, {
         method: 'POST',
         body: formData,
+        signal: controller.signal,
       });
 
+      clearTimeout(timeoutId);
+
       if (!response.ok) {
-        throw new Error('Failed to analyze emotion');
+        const errorText = await response.text();
+        throw new Error(`Backend error: ${response.status} - ${errorText}`);
       }
 
       const data = await response.json();
       setEmotion(data.emotion);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      console.error('Error:', err);
+      if (err instanceof Error) {
+        if (err.name === 'AbortError') {
+          setError('Request timeout - Backend is waking up. Please try again in 30 seconds.');
+        } else {
+          setError(err.message);
+        }
+      } else {
+        setError('An error occurred. Make sure backend is running.');
+      }
     } finally {
       setLoading(false);
     }
@@ -130,6 +149,7 @@ export default function Home() {
             <div className="text-center">
               <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-4 border-indigo-600"></div>
               <p className="mt-4 text-gray-600 font-medium">Analyzing emotion...</p>
+              <p className="mt-2 text-sm text-gray-500">First request may take 30-60 seconds while backend wakes up</p>
             </div>
           )}
 
