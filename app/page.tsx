@@ -1,65 +1,151 @@
-import Image from "next/image";
+'use client';
+
+import { useRef, useState } from 'react';
+import Webcam from 'react-webcam';
 
 export default function Home() {
+  const webcamRef = useRef<Webcam>(null);
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [emotion, setEmotion] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const capturePhoto = () => {
+    if (webcamRef.current) {
+      const imageSrc = webcamRef.current.getScreenshot();
+      setCapturedImage(imageSrc);
+      setEmotion(null);
+      setError(null);
+    }
+  };
+
+  const analyzeEmotion = async () => {
+    if (!capturedImage) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Convert base64 to Blob
+      const base64Data = capturedImage.split(',')[1];
+      const byteCharacters = atob(base64Data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'image/jpeg' });
+
+      // Send to backend
+      const formData = new FormData();
+      formData.append('image', blob, 'photo.jpg');
+
+      const response = await fetch('http://localhost:3001/api/analyze', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to analyze emotion');
+      }
+
+      const data = await response.json();
+      setEmotion(data.emotion);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-2xl w-full">
+        <h1 className="text-4xl font-bold text-center mb-8 text-gray-800">
+          Emotion Face Reader
+        </h1>
+
+        <div className="space-y-6">
+          {/* Webcam or Captured Image */}
+          <div className="flex justify-center">
+            {!capturedImage ? (
+              <div className="border-4 border-gray-300 rounded-lg overflow-hidden">
+                <Webcam
+                  ref={webcamRef}
+                  screenshotFormat="image/jpeg"
+                  className="w-full max-w-md"
+                  videoConstraints={{
+                    width: 640,
+                    height: 480,
+                    facingMode: 'user',
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="border-4 border-indigo-300 rounded-lg overflow-hidden">
+                <img
+                  src={capturedImage}
+                  alt="Captured"
+                  className="w-full max-w-md"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Buttons */}
+          <div className="flex justify-center gap-4">
+            {!capturedImage ? (
+              <button
+                onClick={capturePhoto}
+                className="bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold py-3 px-8 rounded-lg shadow-md transition-all duration-200 transform hover:scale-105"
+              >
+                📸 Capture Photo
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={() => {
+                    setCapturedImage(null);
+                    setEmotion(null);
+                    setError(null);
+                  }}
+                  className="bg-gray-500 hover:bg-gray-600 active:bg-gray-700 text-white font-semibold py-3 px-8 rounded-lg shadow-md transition-all duration-200 transform hover:scale-105"
+                >
+                  🔄 Retake
+                </button>
+                <button
+                  onClick={analyzeEmotion}
+                  disabled={loading}
+                  className="bg-green-600 hover:bg-green-700 active:bg-green-800 disabled:bg-gray-400 text-white font-semibold py-3 px-8 rounded-lg shadow-md transition-all duration-200 transform hover:scale-105 disabled:cursor-not-allowed disabled:transform-none"
+                >
+                  {loading ? '⏳ Analyzing...' : '🔍 Analyze'}
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* Results */}
+          {loading && (
+            <div className="text-center">
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-4 border-indigo-600"></div>
+              <p className="mt-4 text-gray-600 font-medium">Analyzing emotion...</p>
+            </div>
+          )}
+
+          {emotion && !loading && (
+            <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 rounded-xl p-6 text-center">
+              <p className="text-gray-700 font-medium mb-2">Detected Emotion:</p>
+              <p className="text-5xl font-bold text-green-700">{emotion}</p>
+            </div>
+          )}
+
+          {error && (
+            <div className="bg-red-50 border-2 border-red-300 rounded-xl p-4 text-center">
+              <p className="text-red-700 font-medium">❌ {error}</p>
+            </div>
+          )}
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+      </div>
     </div>
   );
 }
