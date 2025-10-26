@@ -40,7 +40,8 @@ export default function Home() {
       const formData = new FormData();
       formData.append('image', blob, 'photo.jpg');
 
-      const response = await fetch('http://localhost:3001/api/analyze', {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+      const response = await fetch(`${backendUrl}/api/analyze`, {
         method: 'POST',
         body: formData,
       });
